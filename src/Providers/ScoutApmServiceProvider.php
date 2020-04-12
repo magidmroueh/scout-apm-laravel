@@ -8,13 +8,12 @@ use Illuminate\Cache\CacheManager;
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Contracts\Events\Dispatcher;
-use Illuminate\Contracts\Foundation\Application;
-use Illuminate\Contracts\Http\Kernel as HttpKernelInterface;
+use Illuminate\Database\Capsule\Manager;
+use Laravel\Lumen\Application;
 use Illuminate\Contracts\View\Engine;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
-use Illuminate\Foundation\Http\Kernel as HttpKernelImplementation;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\ServiceProvider;
@@ -25,10 +24,6 @@ use Scoutapm\Agent;
 use Scoutapm\Config;
 use Scoutapm\Config\ConfigKey;
 use Scoutapm\Laravel\Database\QueryListener;
-use Scoutapm\Laravel\Middleware\ActionInstrument;
-use Scoutapm\Laravel\Middleware\IgnoredEndpoints;
-use Scoutapm\Laravel\Middleware\MiddlewareInstrument;
-use Scoutapm\Laravel\Middleware\SendRequestToScout;
 use Scoutapm\Laravel\Queue\JobQueueListener;
 use Scoutapm\Laravel\View\Engine\ScoutViewCompilerEngineDecorator;
 use Scoutapm\Laravel\View\Engine\ScoutViewEngineDecorator;
@@ -39,7 +34,6 @@ use function array_combine;
 use function array_filter;
 use function array_map;
 use function array_merge;
-use function config_path;
 
 final class ScoutApmServiceProvider extends ServiceProvider
 {
@@ -111,6 +105,10 @@ final class ScoutApmServiceProvider extends ServiceProvider
         } else {
             $this->resolveEngineResolverOnBoot = true;
         }
+
+        $this->app->afterResolving('db', function(Connection $db) {
+            die("DB resolved");
+        });
     }
 
     /**
@@ -151,17 +149,12 @@ final class ScoutApmServiceProvider extends ServiceProvider
     public function boot(
         Application $application,
         ScoutApmAgent $agent,
-        FilteredLogLevelDecorator $log,
-        Connection $connection
+        FilteredLogLevelDecorator $log
     ) : void {
-        $log->debug('Agent is starting');
-
-        $this->publishes([
-            __DIR__ . '/../../config/scout_apm.php' => config_path('scout_apm.php'),
-        ]);
+        //For some reason, typehinting the connection seems to suck
+        $connection = app('db')->connection();
 
         $runningInConsole = $application->runningInConsole();
-
         $this->instrumentDatabaseQueries($agent, $connection);
 
         if ($agent->shouldInstrument(self::INSTRUMENT_LARAVEL_QUEUES)) {
@@ -172,16 +165,10 @@ final class ScoutApmServiceProvider extends ServiceProvider
             return;
         }
 
-        $httpKernel = $application->make(HttpKernelInterface::class);
-        $this->instrumentMiddleware($httpKernel);
-
         if ($this->resolveEngineResolverOnBoot) {
             $engineResolver = $this->app['view.engine.resolver'];
             $this->resolveEngines($engineResolver);
 
-            /**
-             * Just to be on the safe side, prevent re-resolving
-             */
             $this->resolveEngineResolverOnBoot = false;
         }
     }
@@ -203,21 +190,6 @@ final class ScoutApmServiceProvider extends ServiceProvider
         }
     }
 
-    /**
-     * @param HttpKernelImplementation $kernel
-     *
-     * @noinspection PhpDocSignatureInspection
-     */
-    private function instrumentMiddleware(HttpKernelInterface $kernel) : void
-    {
-        $kernel->prependMiddleware(MiddlewareInstrument::class);
-        $kernel->pushMiddleware(ActionInstrument::class);
-
-        // Must be outside any other scout instruments. When this middleware's terminate is called, it will complete
-        // the request, and send it to the CoreAgent.
-        $kernel->prependMiddleware(IgnoredEndpoints::class);
-        $kernel->prependMiddleware(SendRequestToScout::class);
-    }
 
     private function instrumentDatabaseQueries(ScoutApmAgent $agent, Connection $connection) : void
     {
