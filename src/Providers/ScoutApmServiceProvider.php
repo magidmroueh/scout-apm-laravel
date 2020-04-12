@@ -10,10 +10,12 @@ use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Capsule\Manager;
 use Laravel\Lumen\Application;
+use Illuminate\Contracts\Http\Kernel as HttpKernelInterface;
 use Illuminate\Contracts\View\Engine;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Foundation\Http\Kernel as HttpKernelImplementation;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\ServiceProvider;
@@ -24,6 +26,11 @@ use Scoutapm\Agent;
 use Scoutapm\Config;
 use Scoutapm\Config\ConfigKey;
 use Scoutapm\Laravel\Database\QueryListener;
+use Scoutapm\Laravel\Listeners\QueryExecutedListener;
+use Scoutapm\Laravel\Middleware\ActionInstrument;
+use Scoutapm\Laravel\Middleware\IgnoredEndpoints;
+use Scoutapm\Laravel\Middleware\MiddlewareInstrument;
+use Scoutapm\Laravel\Middleware\SendRequestToScout;
 use Scoutapm\Laravel\Queue\JobQueueListener;
 use Scoutapm\Laravel\View\Engine\ScoutViewCompilerEngineDecorator;
 use Scoutapm\Laravel\View\Engine\ScoutViewEngineDecorator;
@@ -34,6 +41,7 @@ use function array_combine;
 use function array_filter;
 use function array_map;
 use function array_merge;
+use function config_path;
 
 final class ScoutApmServiceProvider extends ServiceProvider
 {
@@ -105,10 +113,6 @@ final class ScoutApmServiceProvider extends ServiceProvider
         } else {
             $this->resolveEngineResolverOnBoot = true;
         }
-
-        $this->app->afterResolving('db', function(Connection $db) {
-            die("DB resolved");
-        });
     }
 
     /**
@@ -193,17 +197,11 @@ final class ScoutApmServiceProvider extends ServiceProvider
 
     private function instrumentDatabaseQueries(ScoutApmAgent $agent, Connection $connection) : void
     {
-        if (class_exists(QueryExecuted::class)) {
-            $connection->listen(static function (QueryExecuted $query) use ($agent) : void {
-                (new QueryListener($agent))->__invoke($query);
-            });
-        } else {
-            require_once __DIR__ . "/../Database/QueryExecuted.php";
-            $connection->listen(static function ($sql, $bindings, $time) use ($agent) : void {
-                $query = new QueryExecuted($sql, $bindings, $time);
-                (new QueryListener($agent))->__invoke($query);
-            });
-        }
+        /**
+         * @var Dispatcher $events
+         */
+        $events = app('events');
+        $events->listen(QueryExecuted::class, QueryExecutedListener::class);
     }
 
     private function instrumentQueues(ScoutApmAgent $agent, Dispatcher $eventDispatcher, bool $runningInConsole) : void
