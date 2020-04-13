@@ -83,7 +83,6 @@ final class ActionInstrument
                 $name = $matchedRoute['action']['as'] ?? $matchedRoute['action']['uses'];
             }
         } catch (Throwable $e) {
-            die($e->getMessage());
             $this->logger->debug(
                 'Exception obtaining name of endpoint: ' . $e->getMessage(),
                 ['exception' => $e]
