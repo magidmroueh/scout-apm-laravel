@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file, in reverse chronological order by release.
 
+## 1.5.0 - 2020-05-28
+
+### Added
+
+- Nothing.
+
+### Changed
+
+- [#59](https://github.com/scoutapp/scout-apm-laravel/pull/59) Updated to use scout-apm-php:^4.4 to solve ramsey/uuid v4 issues
+
+### Deprecated
+
+- Nothing.
+
+### Removed
+
+- Nothing.
+
+### Fixed
+
+- Nothing.
+
+## 1.4.0 - 2020-05-27
+
+### Added
+
+- [#56](https://github.com/scoutapp/scout-apm-laravel/pull/56) Added support for ramsey/uuid ^4.0
+
+### Changed
+
+- [#57](https://github.com/scoutapp/scout-apm-laravel/pull/57) Switched to using GitHub Actions instead of Travis
+
+### Deprecated
+
+- Nothing.
+
+### Removed
+
+- Nothing.
+
+### Fixed
+
+- Nothing.
+
 ## 1.3.0 - 2020-03-17
 
 ### Added
